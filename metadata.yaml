@@ -1,0 +1,14 @@
+name: Vehicle Summary
+author:
+  name: ""
+  organization: APN
+  email: ""
+description: >
+  Fleet-wide rollup of vehicle activity for Argentina's national parks
+  (Administración de Parques Nacionales). Aggregates every "Libro Diario
+  Vehicular" (Vehicle Daily Log) event into fleet-level statistics — vehicles
+  used, journeys made, distance travelled, and fuel consumed by type — plus a
+  per-journey table and monthly usage trend charts.
+theory: ""
+output_comment: ""
+citation: ""
