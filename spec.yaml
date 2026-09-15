@@ -126,6 +126,7 @@ workflow:
             - Patente  # licence plate / vehicle identifier
           output_column_name: patente
           output_type: str
+          fan_out: true
 
       - name: Extract Departure KM from Event Details  # KM at start of journey
         id: extract_km_salida
@@ -137,6 +138,7 @@ workflow:
             - KM_de_salida  # odometer reading on departure
           output_column_name: km_salida
           output_type: float
+          fan_out: true
 
       - name: Extract Arrival KM from Event Details  # KM at end of journey
         id: extract_km_llegada
@@ -148,6 +150,7 @@ workflow:
             - Km_de_llegada  # odometer reading on arrival
           output_column_name: km_llegada
           output_type: float
+          fan_out: true
 
       - name: Extract Litros Cargados from Event Details  # Fuel loaded (litres)
         id: extract_litros
@@ -159,6 +162,7 @@ workflow:
             - Litros_cargados  # litres of fuel loaded during the journey
           output_column_name: litros_cargados
           output_type: float
+          fan_out: true
 
       - name: Extract Fuel Type from Event Details  # Tipo de combustible = fuel type
         id: extract_tipo_combustible
@@ -170,6 +174,7 @@ workflow:
             - Tipo_de_combustible  # e.g. "diesel_comun" or petrol variants
           output_column_name: tipo_combustible
           output_type: str
+          fan_out: true
 
       - name: Count Passengers from Event Details  # Pasajeros = array of passenger names; count its length
         id: extract_ocupantes
@@ -190,6 +195,7 @@ workflow:
             - Motivo_del_desplazamiento  # reason / purpose of the trip
           output_column_name: objetivo
           output_type: str
+          fan_out: true
 
       - name: Format Trip Purpose
         id: format_objetivo
@@ -209,6 +215,7 @@ workflow:
             - Origen_del_desplazamiento  # starting location of the trip
           output_column_name: origen
           output_type: str
+          fan_out: true
 
       - name: Extract Destination from Event Details  # Destino = destination
         id: extract_destino
@@ -220,6 +227,7 @@ workflow:
             - Destino  # end destination of the trip
           output_column_name: destino
           output_type: str
+          fan_out: true
 
       - name: Extract Return Time from Event Details  # Regreso = return/arrival datetime
         id: extract_hora_llegada
@@ -231,6 +239,7 @@ workflow:
             - Regreso  # return datetime (date-time field in v2 schema)
           output_column_name: regreso
           output_type: str
+          fan_out: true
 
       # Calculate distance travelled per journey: km_llegada - km_salida
       - name: Calculate KM Travelled per Journey
@@ -449,6 +458,7 @@ workflow:
             destino: "Destino"                 # Destination
             km_viaje: "Distancia (km)"         # Distance (km)
           drop_columns: null
+          duplicate_strategy: suffix
 
       - name: Draw Journey Summary Table
         id: journey_table
