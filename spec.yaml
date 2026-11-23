@@ -251,7 +251,7 @@ workflow:
 
       # Calculate distance travelled per journey: km_llegada - km_salida
       - name: Calculate KM Travelled per Journey
-        id: km_por_viaje  # km per trip
+        id: km_por_viaje_raw  # km per trip
         task: apply_arithmetic_operation_over_rows
         partial:
           df: ${{ workflow.extract_hora_llegada.return }}
@@ -263,6 +263,15 @@ workflow:
       # --- Stat card widgets ---
 
       # Widget: Number of unique vehicles used
+
+      # A return odometer lower than the departure one is a typo; don't let it skew the totals
+      - name: Ignore Impossible Trip Distances
+        id: km_por_viaje
+        task: blank_negative_values
+        partial:
+          df: ${{ workflow.km_por_viaje_raw.return }}
+          column: km_viaje
+
       - name: Calculate Number of Vehicles Used
         id: total_vehicles
         task: dataframe_column_nunique

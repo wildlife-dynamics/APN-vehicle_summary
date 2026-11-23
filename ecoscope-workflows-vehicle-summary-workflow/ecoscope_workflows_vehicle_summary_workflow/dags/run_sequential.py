@@ -16,6 +16,7 @@ from ecoscope.platform.tasks.analysis import (
 )
 from ecoscope.platform.tasks.analysis import dataframe_count as dataframe_count
 from ecoscope.platform.tasks.analysis import summarize_df as summarize_df
+from ecoscope.platform.tasks.config import set_string_var as set_string_var
 from ecoscope.platform.tasks.config import set_workflow_details as set_workflow_details
 from ecoscope.platform.tasks.filter import (
     get_timezone_from_time_range as get_timezone_from_time_range,
@@ -54,9 +55,15 @@ from ecoscope_workflows_ext_apn.tasks import (
 from ecoscope_workflows_ext_apn.tasks import (
     gather_apn_dashboard as gather_apn_dashboard,
 )
+from ecoscope_workflows_ext_apn.tasks import (
+    generate_vehicle_summary_report as generate_vehicle_summary_report,
+)
 from ecoscope_workflows_ext_apn.tasks import get_user_me as get_user_me
 from ecoscope_workflows_ext_apn.tasks import join_list_column as join_list_column
 from ecoscope_workflows_ext_apn.tasks import set_color_palette as set_color_palette
+from ecoscope_workflows_ext_custom.tasks.io import (
+    remove_file_scheme as remove_file_scheme,
+)
 from ecoscope_workflows_ext_custom.tasks.localization import set_locale as set_locale
 from ecoscope_workflows_ext_custom.tasks.transformation import (
     exclude_row_values as exclude_row_values,
@@ -242,7 +249,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
                 "geometry",
                 "event_details",
             ],
-            event_types=["libro_diario_vehicular_v2"],
+            event_types=["libro_diario_vehicular"],
             include_details=True,
             raise_on_empty=False,
             include_updates=False,
@@ -293,7 +300,11 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .partial(
             df=processed_events,
             column_name="event_details",
-            field_name_options=["Patente"],
+            field_name_options=[
+                "vehiculo_no_listado_patente",
+                "vehiculo_patente",
+                "Patente",
+            ],
             output_column_name="patente",
             output_type="str",
             fan_out=True,
@@ -368,7 +379,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .partial(
             df=extract_km_llegada,
             column_name="event_details",
-            field_name_options=["Litros_cargados"],
+            field_name_options=["cantidad_de_litros_cargados", "Litros_cargados"],
             output_column_name="litros_cargados",
             output_type="float",
             fan_out=True,
@@ -393,7 +404,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .partial(
             df=extract_litros,
             column_name="event_details",
-            field_name_options=["Tipo_de_combustible"],
+            field_name_options=["tipo_de_combustible_cargado", "Tipo_de_combustible"],
             output_column_name="tipo_combustible",
             output_type="str",
             fan_out=True,
@@ -418,7 +429,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .partial(
             df=extract_tipo_combustible,
             column_name="event_details",
-            field_name="Pasajeros",
+            field_name="ocupantes_del_vehiculo",
             output_column_name="ocupantes",
             **(params.get("extract_ocupantes") or {}),
         )
@@ -441,7 +452,10 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .partial(
             df=extract_ocupantes,
             column_name="event_details",
-            field_name_options=["Motivo_del_desplazamiento"],
+            field_name_options=[
+                "motivo_del_desplazamiento",
+                "Motivo_del_desplazamiento",
+            ],
             output_column_name="objetivo",
             output_type="str",
             fan_out=True,
@@ -488,7 +502,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .partial(
             df=format_objetivo,
             column_name="event_details",
-            field_name_options=["Origen_del_desplazamiento"],
+            field_name_options=["origen", "Origen_del_desplazamiento"],
             output_column_name="origen",
             output_type="str",
             fan_out=True,
@@ -513,7 +527,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .partial(
             df=extract_origen,
             column_name="event_details",
-            field_name_options=["Destino"],
+            field_name_options=["destino", "Destino"],
             output_column_name="destino",
             output_type="str",
             fan_out=True,
@@ -538,7 +552,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .partial(
             df=extract_destino,
             column_name="event_details",
-            field_name_options=["Regreso"],
+            field_name_options=["fecha_y_hora_del_regreso", "Regreso"],
             output_column_name="regreso",
             output_type="str",
             fan_out=True,
@@ -766,7 +780,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .partial(
             df=km_por_viaje,
             column="tipo_combustible",
-            values=["Diesel comun"],
+            values=["Diésel común", "Diésel premiun", "Diesel comun"],
             **(params.get("diesel_events") or {}),
         )
         .call()
@@ -847,7 +861,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .partial(
             df=km_por_viaje,
             column="tipo_combustible",
-            values=["Diesel comun"],
+            values=["Diésel común", "Diésel premiun", "Diesel comun"],
             **(params.get("petrol_events") or {}),
         )
         .call()
@@ -1242,6 +1256,92 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             title="Nro. de Viajes por Vehículo",
             data=trips_per_vehicle_chart_html,
             **(params.get("trips_per_vehicle_chart_sv") or {}),
+        )
+        .call()
+    )
+
+    get_template_path = (
+        task(set_string_var)
+        .validate()
+        .set_task_instance_id("get_template_path")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(**(params.get("get_template_path") or {}))
+        .call()
+    )
+
+    norm_template_path = (
+        task(remove_file_scheme)
+        .validate()
+        .set_task_instance_id("norm_template_path")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(path=get_template_path, **(params.get("norm_template_path") or {}))
+        .call()
+    )
+
+    norm_output_dir = (
+        task(remove_file_scheme)
+        .validate()
+        .set_task_instance_id("norm_output_dir")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            **(params.get("norm_output_dir") or {}),
+        )
+        .call()
+    )
+
+    generate_word_doc = (
+        task(generate_vehicle_summary_report)
+        .validate()
+        .set_task_instance_id("generate_word_doc")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                never,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            time_range=time_range,
+            total_vehicles=total_vehicles,
+            total_journeys=total_journeys,
+            total_km=total_km,
+            total_fuel=total_fuel_q,
+            total_diesel=total_diesel_q,
+            total_petrol=total_petrol_q,
+            avg_occupants=avg_occupants,
+            user_details=user_details,
+            template_path=norm_template_path,
+            output_dir=norm_output_dir,
+            monthly_km_chart_html=monthly_km_chart_html,
+            trips_per_vehicle_chart_html=trips_per_vehicle_chart_html,
+            journey_table=journey_table_columns,
+            **(params.get("generate_word_doc") or {}),
         )
         .call()
     )
