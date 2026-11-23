@@ -14,8 +14,8 @@ requirements:
     channel: conda-forge
 
   - name: ecoscope-workflows-ext-apn
-    version: "0.0.30"
-    channel: https://repo.prefix.dev/ecoscope-workflows-custom/
+    version: "*"
+    channel: file:///tmp/ecoscope-workflows-custom/release/artifacts/
 
 rjsf-overrides:
   properties:
@@ -589,6 +589,45 @@ workflow:
         partial:
           title: "Nro. de Viajes por Vehículo"  # No. of Trips per Vehicle
           data: ${{ workflow.trips_per_vehicle_chart_html.return }}
+
+  - name: Get Report Template Path
+    id: get_template_path
+    task: set_string_var
+
+  - id: norm_template_path
+    task: remove_file_scheme
+    partial:
+      path: ${{ workflow.get_template_path.return }}
+
+  - id: norm_output_dir
+    task: remove_file_scheme
+    partial:
+      path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+
+  - title: Vehicle Summary Report
+    type: task-group
+    description: "Generates a DOCX report that mirrors the dashboard above: a real stats table and journey table, plus the two trend charts as images. Any single widget with no data for the period is simply omitted, not the whole report."
+    tasks:
+      - id: generate_word_doc
+        task: generate_vehicle_summary_report
+        skipif:
+          conditions:
+            - never
+        partial:
+          time_range: ${{ workflow.time_range.return }}
+          total_vehicles: ${{ workflow.total_vehicles.return }}
+          total_journeys: ${{ workflow.total_journeys.return }}
+          total_km: ${{ workflow.total_km.return }}
+          total_fuel: ${{ workflow.total_fuel_q.return }}
+          total_diesel: ${{ workflow.total_diesel_q.return }}
+          total_petrol: ${{ workflow.total_petrol_q.return }}
+          avg_occupants: ${{ workflow.avg_occupants.return }}
+          user_details: ${{ workflow.user_details.return }}
+          template_path: ${{ workflow.norm_template_path.return }}
+          output_dir: ${{ workflow.norm_output_dir.return }}
+          monthly_km_chart_html: ${{ workflow.monthly_km_chart_html.return }}
+          trips_per_vehicle_chart_html: ${{ workflow.trips_per_vehicle_chart_html.return }}
+          journey_table: ${{ workflow.journey_table_columns.return }}
 
   - name: Create Dashboard
     id: dashboard
