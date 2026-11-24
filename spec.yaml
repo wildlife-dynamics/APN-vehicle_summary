@@ -14,8 +14,8 @@ requirements:
     channel: conda-forge
 
   - name: ecoscope-workflows-ext-apn
-    version: "*"
-    channel: file:///tmp/ecoscope-workflows-custom/release/artifacts/
+    version: "0.0.33"
+    channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
 rjsf-overrides:
   properties:
@@ -452,11 +452,21 @@ workflow:
     tasks:
       # Select and rename columns for display in the dashboard table.
       # Spanish column names are translated to user-friendly display labels.
+      - name: Show Trip Dates in Local Time
+        id: journey_table_dates
+        task: format_datetime_columns
+        partial:
+          df: ${{ workflow.km_por_viaje.return }}
+          columns:
+            - time
+            - regreso
+          timezone: ${{ workflow.get_timezone.return }}
+
       - name: Select and Rename Columns for Journey Table
         id: journey_table_columns
         task: map_columns
         partial:
-          df: ${{ workflow.km_por_viaje.return }}
+          df: ${{ workflow.journey_table_dates.return }}
           raise_if_not_found: false
           retain_columns:
             - patente        # licence plate
@@ -650,9 +660,17 @@ workflow:
           trips_per_vehicle_chart_html: ${{ workflow.trips_per_vehicle_chart_html.return }}
           journey_table: ${{ workflow.journey_table_columns.return }}
 
+  # the Word report, offered for download with the dashboard (as in APN-patrol_event)
+  - name: Report files
+    id: report_files
+    task: create_files_single_view
+    partial:
+      files:
+        - ${{ workflow.generate_word_doc.return }}
+
   - name: Create Dashboard
     id: dashboard
-    task: gather_apn_dashboard
+    task: gather_dashboard
     partial:
       details: ${{ workflow.workflow_details.return}}
       widgets:
@@ -667,3 +685,4 @@ workflow:
         - ${{ workflow.monthly_km_chart_sv.return }}
         - ${{ workflow.trips_per_vehicle_chart_sv.return }}
       time_range: ${{ workflow.time_range.return}}
+      files: ${{ workflow.report_files.return }}
