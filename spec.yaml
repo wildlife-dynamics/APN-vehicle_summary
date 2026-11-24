@@ -24,10 +24,6 @@ rjsf-overrides:
     get_template_path.properties.var.description: Path or URL to the .docx template used for the report.
     get_template_path.properties.var.default: "https://raw.githubusercontent.com/wildlife-dynamics/APN-vehicle_summary/main/resources/templates/vehicle_summary_report_template.docx"
     get_template_path.properties.var.ecoscope:advanced: true
-    Vehicle Journey Summary Table.properties.journey_table.title: ""
-    Vehicle Journey Summary Table.properties.journey_table.properties.table_config.properties.enable_sorting.default: true
-    Vehicle Journey Summary Table.properties.journey_table.properties.table_config.properties.enable_filtering.default: true
-    Vehicle Journey Summary Table.properties.journey_table.properties.table_config.properties.enable_download.default: true
 
 task-instance-defaults:
   skipif:
@@ -501,6 +497,12 @@ workflow:
         task: draw_table
         partial:
           dataframe: ${{ workflow.journey_table_columns.return }}
+          columns: null
+          table_config:
+            enable_sorting: true
+            enable_filtering: true
+            enable_download: true
+            hide_header: false
 
       - name: Persist Journey Table
         id: journey_table_html

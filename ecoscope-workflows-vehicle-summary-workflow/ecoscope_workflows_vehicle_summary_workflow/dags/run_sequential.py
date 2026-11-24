@@ -1074,7 +1074,17 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             ],
             unpack_depth=1,
         )
-        .partial(dataframe=journey_table_columns, **(params.get("journey_table") or {}))
+        .partial(
+            dataframe=journey_table_columns,
+            columns=None,
+            table_config={
+                "enable_sorting": True,
+                "enable_filtering": True,
+                "enable_download": True,
+                "hide_header": False,
+            },
+            **(params.get("journey_table") or {}),
+        )
         .call()
     )
 
