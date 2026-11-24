@@ -323,31 +323,6 @@
       "type": "object",
       "title": "Libro Diario Vehicular Events"
     },
-    "journey_table": {
-      "additionalProperties": false,
-      "properties": {
-        "columns": {
-          "default": null,
-          "description": "The list of dataframe columns to render in the table. Leave empty to render all columns",
-          "ecoscope:advanced": true,
-          "items": {
-            "type": "string"
-          },
-          "title": "Columns",
-          "type": "array"
-        },
-        "table_config": {
-          "$ref": "#/$defs/TableConfig",
-          "default": null,
-          "description": "Configuration options for the table.",
-          "ecoscope:advanced": true,
-          "title": "Table Config"
-        }
-      },
-      "required": [],
-      "type": "object",
-      "title": "Draw Journey Summary Table"
-    },
     "get_template_path": {
       "additionalProperties": false,
       "properties": {
@@ -423,32 +398,6 @@
       ],
       "title": "QualitativeColormap",
       "type": "string"
-    },
-    "TableConfig": {
-      "properties": {
-        "enable_sorting": {
-          "default": true,
-          "title": "Enable Sorting",
-          "type": "boolean"
-        },
-        "enable_filtering": {
-          "default": false,
-          "title": "Enable Filtering",
-          "type": "boolean"
-        },
-        "enable_download": {
-          "default": false,
-          "title": "Enable Download",
-          "type": "boolean"
-        },
-        "hide_header": {
-          "default": false,
-          "title": "Hide Header",
-          "type": "boolean"
-        }
-      },
-      "title": "TableConfig",
-      "type": "object"
     }
   },
   "uiSchema": {
@@ -477,12 +426,6 @@
         "force_point_geometry"
       ]
     },
-    "journey_table": {
-      "ui:order": [
-        "columns",
-        "table_config"
-      ]
-    },
     "ui:order": [
       "workflow_details",
       "er_client",
@@ -490,7 +433,6 @@
       "time_range",
       "plot_palette",
       "events",
-      "journey_table",
       "get_template_path"
     ]
   },
