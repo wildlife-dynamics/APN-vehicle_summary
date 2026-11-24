@@ -56,17 +56,24 @@ from ecoscope.platform.tasks.analysis import summarize_df as summarize_df
 from ecoscope.platform.tasks.config import set_string_var as set_string_var
 from ecoscope.platform.tasks.io import persist_text as persist_text
 from ecoscope.platform.tasks.results import (
+    create_files_single_view as create_files_single_view,
+)
+from ecoscope.platform.tasks.results import (
     create_plot_widget_single_view as create_plot_widget_single_view,
 )
 from ecoscope.platform.tasks.results import (
     create_single_value_widget_single_view as create_single_value_widget_single_view,
 )
 from ecoscope.platform.tasks.results import draw_table as draw_table
+from ecoscope.platform.tasks.results import gather_dashboard as gather_dashboard
 from ecoscope.platform.tasks.skip import never as never
 from ecoscope.platform.tasks.transformation import (
     extract_value_from_json_column as extract_value_from_json_column,
 )
 from ecoscope.platform.tasks.transformation import map_columns as map_columns
+from ecoscope_workflows_ext_apn.tasks import (
+    blank_negative_values as blank_negative_values,
+)
 from ecoscope_workflows_ext_apn.tasks import (
     draw_bar_chart_colored as draw_bar_chart_colored,
 )
@@ -77,7 +84,7 @@ from ecoscope_workflows_ext_apn.tasks import (
     extract_array_length_from_json_column as extract_array_length_from_json_column,
 )
 from ecoscope_workflows_ext_apn.tasks import (
-    gather_apn_dashboard as gather_apn_dashboard,
+    format_datetime_columns as format_datetime_columns,
 )
 from ecoscope_workflows_ext_apn.tasks import (
     generate_vehicle_summary_report as generate_vehicle_summary_report,
@@ -580,10 +587,10 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .call()
     )
 
-    km_por_viaje = (
+    km_por_viaje_raw = (
         task(apply_arithmetic_operation_over_rows)
         .validate()
-        .set_task_instance_id("km_por_viaje")
+        .set_task_instance_id("km_por_viaje_raw")
         .handle_errors()
         .with_tracing()
         .skipif(
@@ -599,7 +606,26 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             column_b="km_salida",
             output_column="km_viaje",
             operation="subtract",
-            **(params.get("km_por_viaje") or {}),
+            **(params.get("km_por_viaje_raw") or {}),
+        )
+        .call()
+    )
+
+    km_por_viaje = (
+        task(blank_negative_values)
+        .validate()
+        .set_task_instance_id("km_por_viaje")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            df=km_por_viaje_raw, column="km_viaje", **(params.get("km_por_viaje") or {})
         )
         .call()
     )
@@ -987,6 +1013,28 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .call()
     )
 
+    journey_table_dates = (
+        task(format_datetime_columns)
+        .validate()
+        .set_task_instance_id("journey_table_dates")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            df=km_por_viaje,
+            columns=["time", "regreso"],
+            timezone=get_timezone,
+            **(params.get("journey_table_dates") or {}),
+        )
+        .call()
+    )
+
     journey_table_columns = (
         task(map_columns)
         .validate()
@@ -1001,7 +1049,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             unpack_depth=1,
         )
         .partial(
-            df=km_por_viaje,
+            df=journey_table_dates,
             raise_if_not_found=False,
             retain_columns=[
                 "patente",
@@ -1365,8 +1413,25 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .call()
     )
 
+    report_files = (
+        task(create_files_single_view)
+        .validate()
+        .set_task_instance_id("report_files")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(files=[generate_word_doc], **(params.get("report_files") or {}))
+        .call()
+    )
+
     dashboard = (
-        task(gather_apn_dashboard)
+        task(gather_dashboard)
         .validate()
         .set_task_instance_id("dashboard")
         .handle_errors()
@@ -1393,6 +1458,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
                 trips_per_vehicle_chart_sv,
             ],
             time_range=time_range,
+            files=report_files,
             **(params.get("dashboard") or {}),
         )
         .call()
