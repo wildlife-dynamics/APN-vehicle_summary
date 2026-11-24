@@ -53,7 +53,11 @@ from ecoscope.platform.tasks.analysis import (
 )
 from ecoscope.platform.tasks.analysis import dataframe_count as dataframe_count
 from ecoscope.platform.tasks.analysis import summarize_df as summarize_df
+from ecoscope.platform.tasks.config import set_string_var as set_string_var
 from ecoscope.platform.tasks.io import persist_text as persist_text
+from ecoscope.platform.tasks.results import (
+    create_files_single_view as create_files_single_view,
+)
 from ecoscope.platform.tasks.results import (
     create_plot_widget_single_view as create_plot_widget_single_view,
 )
@@ -61,11 +65,15 @@ from ecoscope.platform.tasks.results import (
     create_single_value_widget_single_view as create_single_value_widget_single_view,
 )
 from ecoscope.platform.tasks.results import draw_table as draw_table
+from ecoscope.platform.tasks.results import gather_dashboard as gather_dashboard
 from ecoscope.platform.tasks.skip import never as never
 from ecoscope.platform.tasks.transformation import (
     extract_value_from_json_column as extract_value_from_json_column,
 )
 from ecoscope.platform.tasks.transformation import map_columns as map_columns
+from ecoscope_workflows_ext_apn.tasks import (
+    blank_negative_values as blank_negative_values,
+)
 from ecoscope_workflows_ext_apn.tasks import (
     draw_bar_chart_colored as draw_bar_chart_colored,
 )
@@ -76,9 +84,15 @@ from ecoscope_workflows_ext_apn.tasks import (
     extract_array_length_from_json_column as extract_array_length_from_json_column,
 )
 from ecoscope_workflows_ext_apn.tasks import (
-    gather_apn_dashboard as gather_apn_dashboard,
+    format_datetime_columns as format_datetime_columns,
+)
+from ecoscope_workflows_ext_apn.tasks import (
+    generate_vehicle_summary_report as generate_vehicle_summary_report,
 )
 from ecoscope_workflows_ext_apn.tasks import join_list_column as join_list_column
+from ecoscope_workflows_ext_custom.tasks.io import (
+    remove_file_scheme as remove_file_scheme,
+)
 from ecoscope_workflows_ext_custom.tasks.transformation import (
     exclude_row_values as exclude_row_values,
 )
@@ -261,7 +275,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
                 "geometry",
                 "event_details",
             ],
-            event_types=["libro_diario_vehicular_v2"],
+            event_types=["libro_diario_vehicular"],
             include_details=True,
             raise_on_empty=False,
             include_updates=False,
@@ -312,7 +326,11 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .partial(
             df=processed_events,
             column_name="event_details",
-            field_name_options=["Patente"],
+            field_name_options=[
+                "vehiculo_no_listado_patente",
+                "vehiculo_patente",
+                "Patente",
+            ],
             output_column_name="patente",
             output_type="str",
             fan_out=True,
@@ -387,7 +405,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .partial(
             df=extract_km_llegada,
             column_name="event_details",
-            field_name_options=["Litros_cargados"],
+            field_name_options=["cantidad_de_litros_cargados", "Litros_cargados"],
             output_column_name="litros_cargados",
             output_type="float",
             fan_out=True,
@@ -412,7 +430,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .partial(
             df=extract_litros,
             column_name="event_details",
-            field_name_options=["Tipo_de_combustible"],
+            field_name_options=["tipo_de_combustible_cargado", "Tipo_de_combustible"],
             output_column_name="tipo_combustible",
             output_type="str",
             fan_out=True,
@@ -437,7 +455,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .partial(
             df=extract_tipo_combustible,
             column_name="event_details",
-            field_name="Pasajeros",
+            field_name="ocupantes_del_vehiculo",
             output_column_name="ocupantes",
             **(params.get("extract_ocupantes") or {}),
         )
@@ -460,7 +478,10 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .partial(
             df=extract_ocupantes,
             column_name="event_details",
-            field_name_options=["Motivo_del_desplazamiento"],
+            field_name_options=[
+                "motivo_del_desplazamiento",
+                "Motivo_del_desplazamiento",
+            ],
             output_column_name="objetivo",
             output_type="str",
             fan_out=True,
@@ -507,7 +528,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .partial(
             df=format_objetivo,
             column_name="event_details",
-            field_name_options=["Origen_del_desplazamiento"],
+            field_name_options=["origen", "Origen_del_desplazamiento"],
             output_column_name="origen",
             output_type="str",
             fan_out=True,
@@ -532,7 +553,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .partial(
             df=extract_origen,
             column_name="event_details",
-            field_name_options=["Destino"],
+            field_name_options=["destino", "Destino"],
             output_column_name="destino",
             output_type="str",
             fan_out=True,
@@ -557,7 +578,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .partial(
             df=extract_destino,
             column_name="event_details",
-            field_name_options=["Regreso"],
+            field_name_options=["fecha_y_hora_del_regreso", "Regreso"],
             output_column_name="regreso",
             output_type="str",
             fan_out=True,
@@ -566,10 +587,10 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .call()
     )
 
-    km_por_viaje = (
+    km_por_viaje_raw = (
         task(apply_arithmetic_operation_over_rows)
         .validate()
-        .set_task_instance_id("km_por_viaje")
+        .set_task_instance_id("km_por_viaje_raw")
         .handle_errors()
         .with_tracing()
         .skipif(
@@ -585,7 +606,26 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             column_b="km_salida",
             output_column="km_viaje",
             operation="subtract",
-            **(params.get("km_por_viaje") or {}),
+            **(params.get("km_por_viaje_raw") or {}),
+        )
+        .call()
+    )
+
+    km_por_viaje = (
+        task(blank_negative_values)
+        .validate()
+        .set_task_instance_id("km_por_viaje")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            df=km_por_viaje_raw, column="km_viaje", **(params.get("km_por_viaje") or {})
         )
         .call()
     )
@@ -785,7 +825,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .partial(
             df=km_por_viaje,
             column="tipo_combustible",
-            values=["Diesel comun"],
+            values=["Diésel común", "Diésel premiun", "Diesel comun"],
             **(params.get("diesel_events") or {}),
         )
         .call()
@@ -866,7 +906,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .partial(
             df=km_por_viaje,
             column="tipo_combustible",
-            values=["Diesel comun"],
+            values=["Diésel común", "Diésel premiun", "Diesel comun"],
             **(params.get("petrol_events") or {}),
         )
         .call()
@@ -973,6 +1013,28 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .call()
     )
 
+    journey_table_dates = (
+        task(format_datetime_columns)
+        .validate()
+        .set_task_instance_id("journey_table_dates")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            df=km_por_viaje,
+            columns=["time", "regreso"],
+            timezone=get_timezone,
+            **(params.get("journey_table_dates") or {}),
+        )
+        .call()
+    )
+
     journey_table_columns = (
         task(map_columns)
         .validate()
@@ -987,7 +1049,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             unpack_depth=1,
         )
         .partial(
-            df=km_por_viaje,
+            df=journey_table_dates,
             raise_if_not_found=False,
             retain_columns=[
                 "patente",
@@ -1265,8 +1327,111 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .call()
     )
 
+    get_template_path = (
+        task(set_string_var)
+        .validate()
+        .set_task_instance_id("get_template_path")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(**(params.get("get_template_path") or {}))
+        .call()
+    )
+
+    norm_template_path = (
+        task(remove_file_scheme)
+        .validate()
+        .set_task_instance_id("norm_template_path")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(path=get_template_path, **(params.get("norm_template_path") or {}))
+        .call()
+    )
+
+    norm_output_dir = (
+        task(remove_file_scheme)
+        .validate()
+        .set_task_instance_id("norm_output_dir")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            **(params.get("norm_output_dir") or {}),
+        )
+        .call()
+    )
+
+    generate_word_doc = (
+        task(generate_vehicle_summary_report)
+        .validate()
+        .set_task_instance_id("generate_word_doc")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                never,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            time_range=time_range,
+            total_vehicles=total_vehicles,
+            total_journeys=total_journeys,
+            total_km=total_km,
+            total_fuel=total_fuel_q,
+            total_diesel=total_diesel_q,
+            total_petrol=total_petrol_q,
+            avg_occupants=avg_occupants,
+            user_details=user_details,
+            template_path=norm_template_path,
+            output_dir=norm_output_dir,
+            monthly_km_chart_html=monthly_km_chart_html,
+            trips_per_vehicle_chart_html=trips_per_vehicle_chart_html,
+            journey_table=journey_table_columns,
+            **(params.get("generate_word_doc") or {}),
+        )
+        .call()
+    )
+
+    report_files = (
+        task(create_files_single_view)
+        .validate()
+        .set_task_instance_id("report_files")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(files=[generate_word_doc], **(params.get("report_files") or {}))
+        .call()
+    )
+
     dashboard = (
-        task(gather_apn_dashboard)
+        task(gather_dashboard)
         .validate()
         .set_task_instance_id("dashboard")
         .handle_errors()
@@ -1293,6 +1458,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
                 trips_per_vehicle_chart_sv,
             ],
             time_range=time_range,
+            files=report_files,
             **(params.get("dashboard") or {}),
         )
         .call()
